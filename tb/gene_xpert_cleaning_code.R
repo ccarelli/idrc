@@ -98,8 +98,40 @@ dt[ ,year:=unlist(lapply(strsplit(f, "\\."), "[", 4))]
 dt[ ,date:=as.Date(paste0(month,'-', day, '-', year), format="%m-%d-%Y")]
 dt[ ,c('month', 'day', 'year'):=NULL]
 
+
+# ----------------------
+# change reported to a logical
+dt[ ,reported:=reported==1]
+
+# ----------------------
+# exploratory graphs
+
+# facilities reporting by region 
+rep = dt[ ,.(reported=sum(reported), sites=length(unique(genexpert_site))), by=region]
+
+reporting_rate = rep[ ,.(round(100*sum(reported)/sum(sites), 1))]
+
+bar_colors = c('GeneXpert Sites'='#9ecae1', 'Reported'='#fc9272')
+
+ggplot(rep, aes(x=region, y=sites, fill='GeneXpert Sites')) +
+  geom_bar(stat="identity") +
+  geom_bar(aes(y=rep$reported, fill='Reported'), stat="identity") + 
+    scale_fill_manual(name='', values=bar_colors) + theme_minimal() +
+    labs(x='Region', y='GeneXpert Sites', subtitle=paste0('Reporting rate: ', reporting_rate, '%')) +
+theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+
+rep[ ,rate:=round(100*reported/sites, 1)]
+rep[ ,all:=rate==100]
+
+ggplot(rep, aes(x=region, y=rate)) +
+  geom_point(size=rep$sites, alpha=0.5) +
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
+  theme_bw()
+
+
 # ----------------------
 
+tb = dt[ , lapply(.SD, sum)]
 
 
 
