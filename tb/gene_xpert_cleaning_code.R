@@ -13,14 +13,8 @@ library(ggplot2)
 library(stringr) 
 library(plyr)
 library(RColorBrewer)
-library(raster)
-library(maptools)
-library(gplots)
-library(raster)
-library(maptools)
-library(ggrepel)
-library(readxl)
-library(stringi)
+library(readxl) # this library loads the data 
+library(stringi) # this creates a data from the file name
 # --------------------
 
 #------------------------------------------------
@@ -34,10 +28,10 @@ user = 'ccarelli'
 # place all the tb files in a single folder in order to import the folder contents
 
 # change to the folder on your computer where all of the TB data are saved
-inDir = "C:/Users/ccarelli/Documents/tb/"
+if (user=='ccarelli') inDir = "C:/Users/ccarelli/Documents/tb/"
 
 # create a folder for outputs, including figures and cleaned data sets as RDS files
-outDir = "C:/Users/ccarelli/Documents/tb_outputs/"
+if (user=='ccarelli') outDir = "C:/Users/ccarelli/Documents/tb_outputs/"
 
 # create a vector of the file name
 f = list.files(inDir)
