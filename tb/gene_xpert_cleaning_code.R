@@ -15,6 +15,7 @@ library(plyr)
 library(RColorBrewer)
 library(readxl) # this library loads the data 
 library(stringi) # this creates a data from the file name
+library(Hmisc)
 # --------------------
 
 #------------------------------------------------
@@ -54,7 +55,7 @@ dt[ , X__1:=NULL]
 
 
 # list the names for the columns that you want to appear
-new_column_names = c("genexpert_site", "district", "region", "intl_partner", "reported", 
+new_column_names = c("genexpert_site", "district", "region", "impl_partner", "reported", 
                      "total_samples", "tb_positive", "rif_resist", "rif_indet", "total_errors",
                      "children_under_14", "retreatments", "percent_reporting_region", "status")
 
@@ -75,7 +76,7 @@ dt = dt[-1, ]
 # this code finds the areas where 3 columns are false 
 dt[ ,index:=1:nrow(dt)]
 drop = dt[ ,lapply(.SD, is.na), by=index, .SDcols=2:4]
-drop = drop[district==T & region==T & intl_partner==T, min(index)]
+drop = drop[district==T & region==T & impl_partner==T, min(index)]
 dt = dt[index < drop]
 dt[ ,index:=NULL]
 
@@ -94,16 +95,38 @@ dt[ ,machines:=as.numeric(machines)] # machines act as a string
 
 dt[ , day:=stri_extract_first_regex(f, "[0-9]+") ]
 dt[ , month:=unlist(lapply(strsplit(f, "\\."), "[", 3))]
-dt[ ,year:=unlist(lapply(strsplit(f, "\\."), "[", 4))]
-dt[ ,date:=as.Date(paste0(month,'-', day, '-', year), format="%m-%d-%Y")]
+dt[ , year:=unlist(lapply(strsplit(f, "\\."), "[", 4))]
+dt[ , date:=as.Date(paste0(month,'-', day, '-', year), format="%m-%d-%Y")]
 dt[ ,c('month', 'day', 'year'):=NULL]
-
 
 # ----------------------
 # change reported to a logical
 dt[ ,reported:=reported==1]
 
 # ----------------------
+# fix region and implementing partner names with distinct capitalization
+
+dt[region!='KCCA',region:=capitalize(tolower(region))]
+
+# format the names of implementing partners
+dt[(impl_partner!="IDI" & impl_partner!="MUWRP" & impl_partner!="RHSP" & impl_partner!="URC/DHAPP" & impl_partner!="RTI"),
+   impl_partner:=titleCase(tolower(impl_partner))]
+dt[ , impl_partner:=gsub("tb", "TB", impl_partner)]
+dt[ , impl_partner:=gsub("idi", "IDI", impl_partner)]
+dt[ , impl_partner:=gsub("cdc", "CDC", impl_partner)]
+dt[ , impl_partner:=gsub("cdc", "CDC", impl_partner)]
+
+# ----------------------
+# convert character types
+
+dt = dt[ , lapply(.SD, as.numeric), 
+         by=c("genexpert_site", "district", "region", "impl_partner",
+                                    "reported", "date"), .SDcols=6:12]
+
+# ----------------------
+
+
+# ---------------------------------------------
 # exploratory graphs
 
 # facilities reporting by region 
@@ -123,15 +146,65 @@ theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
 rep[ ,rate:=round(100*reported/sites, 1)]
 rep[ ,all:=rate==100]
 
-ggplot(rep, aes(x=region, y=rate)) +
-  geom_point(size=rep$sites, alpha=0.5) +
+ggplot(rep, aes(x=region, y=rate, color=all, size=sites)) +
+  geom_point(alpha=0.5) +
+  theme_bw() +
+  labs(title="Percent of facilities reporting (%)", y="% reporting", x="Region", color="100% reported", 
+       size="Number of facilities") +
+  theme(text = element_text(size=14), axis.text.x=element_text(size=12, angle=90)) 
+
+# -------------------------------------
+# percent of tests that are positive 
+tb = dt[ , lapply(.SD, sum, na.rm=T), by=region, .SDcols=7:13]
+tb[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+
+# plot of percent TB positive
+ggplot(tb, aes(x=region, y=percent_pos, color='red')) +
+  geom_point(size=4, alpha=0.5) +
+  scale_fill_manual(values=all, aesthetics="fill") +
+  theme_bw() +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
-  theme_bw()
+  labs(x='Region', y='Percent TB positive (%)', color=" ",
+       title="Percent of GeneXpert tests that were TB positive, April 1 - 7, 2019") +
+  guides(fill=FALSE, color=FALSE)
+
+# -------------------------------------
+# tests performed by implementer
+
+part = dt[ , lapply(.SD, sum, na.rm=T), by=impl_partner, .SDcols=7:13]
+part[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+
+total = sum(part$total_samples)
+
+ggplot(part, aes(x=impl_partner, y=total_samples, fill='Total samples')) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(x='Implementing Partner', y='Total Samples', subtitle=paste0('Total samples: ', total), 
+   fill=" ") +
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
 
 
-# ----------------------
+total_pr[ , ]
 
-tb = dt[ , lapply(.SD, sum)]
+ggplot(part, aes(x=impl_partner, y=percent_pos, fill='Percent positive')) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  labs(x='Implementing Partner', y='% positive', subtitle=paste0('Total percent positive: ', total_or), 
+       fill=" ") +
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+
+
+
+
+
+
+# -------------------------------------
+
+
+
+
+
+
 
 
 
