@@ -1,7 +1,11 @@
 # ----------------------------------------------
+# GENEXPERT DATA ANALYSIS
+# Cleaning code for GeneXpert data 
+# Imports data as weekly Excel spreadshets
+#
 # Caitlin O'Brien-Carelli
 #
-# 4/25/2019
+# 4/30/2019
 
 # ----------------------------------------------
 
@@ -125,15 +129,26 @@ dt[ ,c('month', 'day', 'year'):=NULL]
 # this code tests the statement "reported==1" and returns T/F
 dt[ ,reported:=reported==1]
 
-# ----------------------
+# ---------------------------------------
 # fix region and implementing partner names with distinct capitalization
 # formatting for figures and tables 
+
+# -------------------------
+# geographic areas 
 
 # format names of regions
 dt[region!='KCCA',region:=capitalize(tolower(region))]
 dt[region=='Fortportal', region:='Fort Portal']
 dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region 
-   
+
+# format the names of districts 
+# drop the words district and hospital, fix capitalization, trim blanks
+dt[ , district:=gsub('District', "", district)]
+dt[ , district:=gsub('Hospital', "", district)]
+dt[ , district:=toTitleCase(tolower(district))]
+dt[ , district:=str_trim(district, side="both")]
+
+# -------------------------
 # format the names of implementing partners
 dt[ ,impl_partner:=gsub("DEFEAT", "Defeat", impl_partner)]
 dt[ ,impl_partner:=gsub("ugcare", "Uganda Cares", impl_partner)]
@@ -144,7 +159,7 @@ dt[impl_partner=='BAYLOR', impl_partner:='Baylor']
 dt[impl_partner=="CDC SOROTI PROJECT", impl_partner:='CDC Soroti Project']
 dt[impl_partner=='No IP', impl_partner:='No partner']
 
-#----------------------
+# -------------------------
 # format facility names and add facility level 
 
 # drop out the (machines-1) designation from the facility names
@@ -173,7 +188,7 @@ total_sites = dt[ ,length(unique(genexpert_site))]
 print(paste0(dt[is.na(level), .(round(length(unique(genexpert_site))/total_sites, 1))],
              '% of total sites are missing the facility level.'))
 
-# ----------------------
+# -----------------------------------------------------------
 # convert character types
 
 dt = dt[ , lapply(.SD, as.numeric), 
