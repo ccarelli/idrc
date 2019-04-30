@@ -33,10 +33,10 @@ user = 'ccarelli'
 
 # change to the folder on your computer where all of the TB data are saved
 # change to the folder on your computer where all of the TB data are saved
-if (user=='ccarelli') inDir = paste0("C:/Users/", user,   "/Documents/tb_raw_data/")
+inDir = paste0("C:/Users/", user,   "/Documents/tb_raw_data/")
 
 # create a folder for outputs, including figures and cleaned data sets as RDS files
-if (user=='ccarelli') outDir = paste0("C:/Users/", user, "/Documents/tb_prepped/")
+outDir = paste0("C:/Users/", user, "/Documents/tb_prepped/")
 
 # create a vector of the file name
 files = list.files(inDir)

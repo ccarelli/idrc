@@ -1,4 +1,8 @@
 # ----------------------------------------------
+# GENEXPERT DATA ANALYSIS
+# Cleaning code for GeneXpert data 
+# Imports as weekly Excel spreadshets
+#
 # Caitlin O'Brien-Carelli
 #
 # 4/25/2019
@@ -13,10 +17,6 @@ library(ggplot2)
 library(stringr) 
 library(plyr)
 library(RColorBrewer)
-library(readxl) # this library loads the data 
-library(stringi) # this creates a data from the file name
-library(Hmisc)
-library(tools)
 library(raster)
 library(maptools)
 # --------------------
@@ -32,7 +32,7 @@ user = 'ccarelli'
 # place all the tb files in a single folder in order to import the folder contents
 
 # change to the folder on your computer where all of the TB data are saved
-if (user=='ccarelli') inDir = "C:/Users/ccarelli/Documents/tb_outputs/"
+if (user=='ccarelli') inDir = paste0("C:/Users/", user_name,   "/Documents/tb_prepped/")
 
 # create a folder for outputs, including figures and cleaned data sets as RDS files
 if (user=='ccarelli') outDir = "C:/Users/ccarelli/Documents/tb_outputs/"
