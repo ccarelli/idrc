@@ -99,7 +99,7 @@ setnames(map_names, c('dist112_na', 'dist112'),
 # this creates maps of all time, rather than by date
 
 # calculate sums and rates at the district level 
-dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=9:15]
+dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=9:16]
 dist[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
 dist[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
 dist[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
@@ -529,7 +529,40 @@ ggplot(coord, aes(x=long, y=lat, group=group, fill=percent_indet)) +
        fill="Percent errors (%)") +
   theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
         plot.caption=element_text(vjust=6)) + coord_fixed()
+  
+  
+#-----------------------------------------
+  
+# number of machines
+  range_mach = paste(dist[ ,range(machines, na.rm=T)][[1]], "-", dist[ ,range(machines, na.rm=T)][[2]])
+  
+  ggplot(coord, aes(x=long, y=lat, group=group, fill=machines)) + 
+    geom_polygon() + 
+    geom_path(size=0.01, color="#636363") + 
+    scale_fill_gradientn(colors=brewer.pal(9, 'YlOrBr')) + 
+    theme_void() + 
+    labs(title = "GeneXpert machines by district" , fill="Machines", 
+         subtitle=paste0("Range: ", range_mach, " machines per district")) +
+    theme(text=element_text(size=18), plot.title=element_text(vjust=-1), plot.subtitle=element_text(vjust=-6)) + coord_fixed()
+  
 
+
+  # count of machines by district - bar
+  ggplot(dist, aes(x=reorder(district, -machines), y=machines, label=machines, fill='red')) +
+    geom_bar(stat="identity") +
+    geom_text(size = 4, position=position_stack(vjust = 1.1)) +
+    scale_fill_manual(values='red') + 
+    theme_minimal() +
+    labs(x='District', y='Count', 
+         title="Count of GeneXpert Machines by District") +
+    theme(axis.text.x=element_text(angle=90)) +
+    guides(fill=FALSE)
+  
+#   
+# dt_new = dt[ ,.(genexpert_site, level, district, machines)]
+# write.csv(dt_new, "J:/Project/Evaluation/GF/outcome_measurement/cod/dhis_data/gene_machines.csv")
+  
+  
 # ----------------------------------------------------------
 # implementing partners  
 
