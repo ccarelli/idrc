@@ -1,12 +1,9 @@
 # ----------------------------------------------
 # GENEXPERT DATA ANALYSIS
-# Cleaning code for GeneXpert data 
-# Imports as weekly Excel spreadshets
+# Create maps and graphs for GeneXpert data
 #
 # Caitlin O'Brien-Carelli
-#
-# 4/25/2019
-# Maps and graphs of the GeneXpert data 
+# 4/30/2019
 # ----------------------------------------------
 
 # --------------------
@@ -19,64 +16,41 @@ library(plyr)
 library(RColorBrewer)
 library(raster)
 library(maptools)
+library(LaCroixColoR)
 # --------------------
 
 #------------------------------------------------
 # to code in the same code, we need to set file pathways for each user
-# change the username to your username to code
-# for example: user = 'copio'
+# this command automatically detects your username!
 
-user = 'ccarelli'
+user = Sys.info()[['user']]
 
 # -----------------------------------------------
-# place all the tb files in a single folder in order to import the folder contents
+# input and output directories
+# the input directory imports the data, output saves figures
 
 # change to the folder on your computer where all of the TB data are saved
-if (user=='ccarelli') inDir = paste0("C:/Users/", user_name,   "/Documents/tb_prepped/")
+inDir = paste0("C:/Users/", user, "/Documents/tb_prepped/")
 
 # create a folder for outputs, including figures and cleaned data sets as RDS files
-if (user=='ccarelli') outDir = "C:/Users/ccarelli/Documents/tb_outputs/"
+outDir = paste0("C:/Users/", user, "/Documents/tb_outputs/")
 
-# set working directory to the location of your shape file for maps
+# set working directory to the location of your shape file 
+# this allows you to create maps
 setwd('J:/Project/Evaluation/GF/mapping/uga/')
 
-#-----------------------------------
-# import the data 
+# -----------------------------------------------
+# import the prepped data 
 
-dt = readRDS(paste0(outDir, 'clean_genexpert_data.rds'))
+dt = readRDS(paste0(inDir, 'clean_genexpert_data.rds'))
 
+# -----------------------------------------------
+# prepare the districts to merge the data with the shape file
 
-#----------------------------------------------------------------------
-# aesthetic properties for maps and graphs
-# color palettes
-
-bar_colors = c('GeneXpert Sites'='#9ecae1', 'Reported'='#fc9272')
-alt_bar_colors = c('GeneXpert Sites'='#fee090', 'Reported'='#b2abd2')
-true_false = c('#bd0026', '#3182bd')
-single_red = '#bd0026'
-single_blue = '#a6bddb'
-turq = '#80cdc1'
-ratios = c('#bd0026', '#3182bd', '#74c476', '#feb24c')
-sex_colors = c('#bd0026', '#3182bd', '#74c476', '#8856a7')
-lav = '#bebada'
-
-#-------------------------------------------------------------
-# maps
-
-#---------------------
-# fix the districts 
-
-# drop the words district and hospital, fix capitalization, trim blanks
-dt[ , district:=gsub('District', "", district)]
-dt[ , district:=gsub('Hospital', "", district)]
-dt[ , district:=toTitleCase(tolower(district))]
-dt[ , district:=str_trim(district, side="both")]
-
-
-
+# some of these districts have new names, and some are misspelled 
 merge_new_dists = function(x) {
   x[district=="Bunyangabu" | district=='Bunyangabo', district:="Kabarole"]
-  x[district=="Butebo", district:="Pallisa"]
+  x[district=="Butebo" | district=='Palisa', district:="Pallisa"]
   x[district=="Kagadi", district:="Kibaale"]
   x[district=="Kakumiro", district:="Kibaale"]
   x[district=="Kyotera", district:="Rakai"]
@@ -88,29 +62,19 @@ merge_new_dists = function(x) {
   x[district=="Luwero", district:="Luweero"]
   x[district=="Sembabule", district:="Ssembabule"]
   x[district=="Kabalore", district:="Kabarole"]
-  x[district=="Busiisa", district:="Busia"]
+  x[district=="Busiisa", district:="Buliisa"]
   x[district=="Bundibujo", district:="Bundibugyo"]
-  x[district=="Palisa", district:="Pallisa"]
   x[district=="Kaberameido", district:="Kaberamaido"]
-  
-}
+  x[district=='Maddu', district:='Gomba']  
+  x[district=='Nabilatuk', district:='Nakapiripirit']
+    }
 
-# run the function on your data set
-# there should be 113 districts - 112 plus one missing
-merge_new_dists(dt)
-length(unique(dt$district))
+# run the function on your data set to fix the names
+dt = merge_new_dists(dt)
 
-#---------------------------------------------
-# calculate rates 
-dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=9:15]
-dist[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
-dist[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
-dist[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
-dist[ ,percent_indet:=round(100*rif_indet/tb_positive, 1)]
-dist[ ,percent_indet_total:=round(100*rif_indet/total_samples, 1)]
-dist[ ,error_rate:=round(100*total_errors/total_samples, 1)]
+# ----------------------------
+# prepare data and shape file to create maps 
 
-#---------------------------------------------
 # uganda shapefile
 map = shapefile('uga_dist112_map.shp')
 
@@ -119,22 +83,53 @@ coord = data.table(fortify(map, region='dist112'))
 coord[, id:=as.numeric(id)]
 
 # check the names for the merge
-map_names = data.table(map@data) 
-map_names = map_names[ ,.(dist112, dist112_na)]
+map_names = data.table(map@data[c('dist112', 'dist112_na')])
 names = dt[ ,unique(district)]
-names[!(names %in% map_names$dist112_na)]
+names[!(names %in% map_names$dist112_na)] # this value should be 0
+
+# there is on district not in the data - kyankwanzi
+map_names[!(dist112_na %in% names)]
 
 # merge the names
-setnames(map_names, 'dist112_na', 'district')
-dist = merge(dist, map_names, by='district', all.x=T)
-setnames(dist, 'dist112', 'id')
+setnames(map_names, c('dist112_na', 'dist112'), 
+         c('district', 'id'))
 
-# merge in the map
+# ---------------------------------------------------------
+# merge the shape file and the data
+# this creates maps of all time, rather than by date
+
+# calculate sums and rates at the district level 
+dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=9:16]
+dist[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+dist[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
+dist[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
+dist[ ,percent_indet:=round(100*rif_indet/tb_positive, 1)]
+dist[ ,percent_indet_total:=round(100*rif_indet/total_samples, 1)]
+dist[ ,error_rate:=round(100*total_errors/total_samples, 1)]
+
+# merge the map and the data using district ids
+dist = merge(dist, map_names, by='district', all=T)
 coord = merge(dist, coord, by='id', all=T)
 
 #---------------------------------------------
 
+#----------------------------------------------------------------------
+# aesthetic properties for maps and graphs
+# create some color palettes for lovely figures
 
+bar_colors = c('GeneXpert Sites'='#9ecae1', 'Reported'='#fc9272')
+alt_bar_colors = c('GeneXpert Sites'='#fee090', 'Reported'='#b2abd2')
+true_false = c('#bd0026', '#3182bd')
+single_red = '#bd0026'
+single_blue = '#a6bddb'
+turq = '#80cdc1'
+ratios = c('#bd0026', '#3182bd', '#74c476', '#feb24c')
+sex_colors = c('#bd0026', '#3182bd', '#74c476', '#8856a7')
+lav = '#bebada'
+croix = lacroix_palette("Pamplemousse", n = 50, type = "continuous")
+
+#-------------------------------------------------------------
+# CREATE MAPS AND GRAPHS 
 
 # --------------------------------------------------------------
 # exploratory graphs
@@ -142,7 +137,7 @@ coord = merge(dist, coord, by='id', all=T)
 pdf(paste0(outDir, 'tb_sample_figures.pdf'), height=9, width=12)
 
 #------------------------------
-# reporting by facilities
+# reporting by genexpert sites
 
 # calculate facilities reporting by region 
 rep = dt[ ,.(reported=sum(reported), sites=length(unique(genexpert_site))), by=region]
@@ -169,7 +164,7 @@ ggplot(rep, aes(x=region, y=rate, color=all, size=sites, label=sites)) +
   theme_bw() +
   ylim(80, NA) +
   scale_color_manual(values=true_false) +
-  labs(title="Percent of GeneXpert reporting (%), April 1 - 7, 2019", y="Percent reporting (%)", x="Region", color="100% reported", 
+  labs(title="Percent of GeneXpert sites reporting (%), April 1 - 7, 2019", y="Percent reporting (%)", x="Region", color="100% reported", 
        size="Number of sites", subtitle='Value label = total number of GeneXpert sites') +
   theme(text = element_text(size=14), axis.text.x=element_text(size=12, angle=90)) 
 
@@ -188,12 +183,50 @@ ggplot(rep_level, aes(x=level, y=sites, fill='GeneXpert Sites', label=sites)) +
   scale_fill_manual(name='', values=alt_bar_colors) + theme_minimal() +
   labs(x='Region', y='Total GeneXpert Sites', subtitle='Value = number of total sites*', 
        title="Number of GeneXpert sites reporting by health facility level",
-       caption=paste0("*", no_reports, ' facilities did not report.' )) +
+       caption=paste0("*", no_reports, ' total facilities did not report.' )) +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12))
 
 #------------------------------
 # samples submitted by children under 14
-dt[ ,.(total_samples = sum(total_samples), children = sum(children_under_14)), by=region]
+
+# calculate the counts and percentages of all samples
+kids = dt[ ,.(total_samples = sum(total_samples), children = sum(children_under_14)), by=region]
+kids[ ,ratio:=round(100*children/total_samples, 1)]
+
+# shape the data long
+kids_long = melt(kids, id.vars='region')
+
+# label the variables 
+kids_long$variable = factor(kids_long$variable, c('total_samples', 'children', 'ratio'),
+                        c('Total samples', 'Samples submitted by children < 14',
+                        'Percentage of samples submitted by children < 14 (%)'))
+
+
+# colors for the stacked bar graphs of samples subkitted by children 
+kid_colors = c('Total samples'='#998ec3', 'Samples submitted by children < 14'='#f1a340')
+percent = round(100*kids[ ,sum(children)/sum(total_samples)], 1)
+
+# bar graph of reporting compared to total sites 
+ggplot(kids, aes(x=region, y=total_samples, fill='Total samples', label=total_samples)) +
+  geom_bar(stat="identity") +
+  geom_bar(aes(y=children, fill='Samples submitted by children < 14'), stat="identity") + 
+  geom_text(size = 4, position=position_stack(vjust = 1.06)) +
+  scale_fill_manual(name='', values=kid_colors) + theme_minimal() +
+  labs(x='Region', y='Samples', 
+       subtitle = paste0(percent, '% of all samples'), 
+       title="Samples submitted by children under 14") +
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+
+# bar graph of reporting compared to total sites 
+ggplot(kids_long[variable!='Total samples'], aes(x=region, y=value, fill=variable, label=value)) +
+  geom_bar(stat="identity") +
+  facet_wrap(~variable, scales='free_y') +
+  geom_text(size = 4, position=position_stack(vjust = 0.5)) +
+  scale_fill_manual(values=c(turq, lav)) +
+  theme_minimal() +
+  labs(x='Region', y=' ', title="Samples submitted by children under 14, count and percentage") +
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
+  guides(fill=FALSE)
 
 #------------------------------
 # count of machines by region and implementer
@@ -272,7 +305,7 @@ part[ ,error_rate:=round(100*total_errors/total_samples, 1)]
 part_sub = part[ ,.(total_samples, tb_positive) , by=impl_partner]
 part_sub = melt(part_sub, id.vars='impl_partner')
 
-
+# tb positive samples by implementing partner
 count_labels2 = part[ ,.(total_samples = sum(total_samples), tb_positive=sum(tb_positive))]
 part_sub$variable = factor(part_sub$variable, c('total_samples', 'tb_positive'),
                            c(paste0('Total samples (n = ', count_labels$total_samples, ')'),
@@ -333,56 +366,85 @@ ggplot(compare[variable!='TB positive'], aes(x=region, y=value, fill=variable)) 
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) 
 
 #------------------------------------------------------------------------------------
-# maps 
+# MAPS OF PROPORTIONS AND COUNTS 
+
+# calculate sample size for labels
+samples = dt[ ,sum(total_samples)]
+retreats = dt[ ,sum(retreatments)]
+pos = dt[ ,sum(tb_positive)]
+childs = dt[ ,sum(children_under_14)]
 
 # total samples
 ggplot(coord, aes(x=long, y=lat, group=group, fill=total_samples)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
-  scale_fill_gradientn(colors=brewer.pal(9, 'Greens')) + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'Blues')) + 
   theme_void() + 
-  labs(title="Total samples by district", subtitle="April 1 - 7, 2019",
+  labs(title="Total samples by district", subtitle=paste0("n = ", samples,  "; April 1 - 7, 2019"),
        fill="Total samples") +
-  theme(plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
         plot.caption=element_text(vjust=6)) + coord_fixed()
 
 # retreatments 
 ggplot(coord, aes(x=long, y=lat, group=group, fill=retreatments)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
-  scale_fill_gradientn(colors=brewer.pal(9, 'Purples')) + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'Greens')) + 
   theme_void() + 
-  labs(title="Total retreatments by district", subtitle="April 1 - 7, 2019",
-       fill="Samples from retreatments") +
-  theme(plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+  labs(title="Total retreatments by district", 
+       subtitle=paste0("n = ", retreats, "; April 1 - 7, 2019"),
+       fill="Retreatments") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
+
+# children under 14 
+ggplot(coord, aes(x=long, y=lat, group=group, fill=children_under_14)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'YlOrRd')) + 
+  theme_void() + 
+  labs(title="Children under 14 submitting samples by district", subtitle="April 1 - 7, 2019",
+       fill=" ") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
         plot.caption=element_text(vjust=6)) + coord_fixed()
 
 # tb positive samples 
 ggplot(coord, aes(x=long, y=lat, group=group, fill=tb_positive)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
-  scale_fill_gradientn(colors=brewer.pal(9, 'Blues')) + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'Purples')) + 
   theme_void() + 
-  labs(title="TB positive samples by district", subtitle="April 1 - 7, 2019",
+  labs(title="TB positive samples by district", subtitle=paste0("n = ", pos, "; April 1 - 7, 2019"),
        fill="TB positive (count)") +
-  theme(plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
         plot.caption=element_text(vjust=6)) + coord_fixed()
 
 # rifampicin resistant 
 ggplot(coord, aes(x=long, y=lat, group=group, fill=rif_resist)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
-  scale_fill_gradientn(colors=brewer.pal(9, 'Reds'), breaks = c(0, 1)) + 
+  scale_fill_gradientn(colors=c('#fcfbfd', '#a50f15'), breaks = c(0, 1)) + 
   theme_void() + 
   labs(title="Rifampicin resistant samples by district", subtitle="Two districts with one RR sample each; April 1 - 7, 2019",
        fill=" ") +
-  theme(plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
         plot.caption=element_text(vjust=6)) + coord_fixed()
 
+# rifampicin indeterminate
+ggplot(coord, aes(x=long, y=lat, group=group, fill=rif_indet)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'GnBu'), breaks = c(0, 3, 6, 9)) + 
+  theme_void() + 
+  labs(title="Rifampicin indeterminate samples by district", subtitle="Two districts with one RR sample each; April 1 - 7, 2019",
+       fill=" ") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
 
 # -------------------------------------
-# percentages of TB positive 
+# rifampicin resistant and indeterminate
 
+# positive for tb, rif, or indeterminate by region 
 pos = reg[ ,.(tb_positive, rif_resist, rif_indet), by=region]
 
 # create totals for labels 
@@ -396,7 +458,6 @@ pos = melt(pos, id.vars='region')
 pos[variable=='ind_ratio', variable:=paste0('Rifampicin indeterminate (n = ', labels$rif_indet, ')')]
 pos[variable=='res_ratio', variable:=paste0('Rifampicin resistant (n = ', labels$rif_resist, ')')]
 
-
 # rifampicin indeterminate, rifampicin resistant
 ggplot(pos, aes(x=region, y=value, fill=variable)) +
   geom_bar(position ="dodge", stat="identity") +
@@ -407,27 +468,101 @@ ggplot(pos, aes(x=region, y=value, fill=variable)) +
        fill='', subtitle=paste0('n = ', labels$tb_positive)) +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) 
 
-
 # -------------------------------------
 # maps of percentages 
 
+# percentage tb positive and rifampicin resistant 
 idVars = c('id', 'lat', 'long', 'order', 'hole', 'piece', 'group')
-new = coord[ ,.(percent_pos, percent_res), by=idVars]
-new = melt(new, id.vars=idVars)
+perc = coord[ ,.(percent_pos, percent_res), by=idVars]
+perc = melt(perc, id.vars=idVars)
 
-new$variable = factor(new$variable, c('percent_pos', 'percent_res'),
+perc$variable = factor(perc$variable, c('percent_pos', 'percent_res'),
                       c('Percentage of tests that were TB positive',
                         'Percentage of TB positive tests that were RR'))
 
-# rates by district
-ggplot(new, aes(x=long, y=lat, group=group, fill=value)) + 
+ggplot(perc, aes(x=long, y=lat, group=group, fill=value)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
-  facet_wrap(~variable, scales='free_y') +
-  scale_fill_gradientn(colors=brewer.pal(11, 'PuBuGn')) + 
+  facet_wrap(~variable) +
+  scale_fill_gradientn(colors=brewer.pal(9, 'PuBuGn')) + 
   theme_void() + 
-  labs(fill="%") +   theme(text = element_text(size=18))
+  labs(fill="%") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
 
+# percent tb positive
+ggplot(coord, aes(x=long, y=lat, group=group, fill=percent_pos)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'Blues')) + 
+  theme_void() + 
+  labs(title = "Percentage of samples that were positive for TB" , fill="%") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
+
+# percent RR
+ggplot(coord, aes(x=long, y=lat, group=group, fill=percent_res)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'Reds')) + 
+  theme_void() + 
+  labs(title = "Percentage of samples that were Rifampicin resistant" , fill="%") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
+
+# percent indeterminate for rifampicin
+ggplot(coord, aes(x=long, y=lat, group=group, fill=percent_indet)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=brewer.pal(9, 'YlOrBr')) + 
+  theme_void() + 
+  labs(title = "Percentage of samples that were Rifampicin indeterminate" , fill="%") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
+
+# error rateggplot(coord, aes(x=long, y=lat, group=group, fill=error_rate)) + 
+  geom_polygon() + 
+  geom_path(size=0.01, color="#636363") + 
+  scale_fill_gradientn(colors=croix) + 
+  theme_void() + 
+  labs(title = "Error rate", subtitle='Percenate of samples that resulted in an error', 
+       fill="Percent errors (%)") +
+  theme(text=element_text(size=18), plot.title=element_text(vjust=-4), plot.subtitle=element_text(vjust=-4), 
+        plot.caption=element_text(vjust=6)) + coord_fixed()
+  
+  
+#-----------------------------------------
+  
+# number of machines
+  range_mach = paste(dist[ ,range(machines, na.rm=T)][[1]], "-", dist[ ,range(machines, na.rm=T)][[2]])
+  
+  ggplot(coord, aes(x=long, y=lat, group=group, fill=machines)) + 
+    geom_polygon() + 
+    geom_path(size=0.01, color="#636363") + 
+    scale_fill_gradientn(colors=brewer.pal(9, 'YlOrBr')) + 
+    theme_void() + 
+    labs(title = "GeneXpert machines by district" , fill="Machines", 
+         subtitle=paste0("Range: ", range_mach, " machines per district")) +
+    theme(text=element_text(size=18), plot.title=element_text(vjust=-1), plot.subtitle=element_text(vjust=-6)) + coord_fixed()
+  
+
+
+  # count of machines by district - bar
+  ggplot(dist, aes(x=reorder(district, -machines), y=machines, label=machines, fill='red')) +
+    geom_bar(stat="identity") +
+    geom_text(size = 4, position=position_stack(vjust = 1.1)) +
+    scale_fill_manual(values='red') + 
+    theme_minimal() +
+    labs(x='District', y='Count', 
+         title="Count of GeneXpert Machines by District") +
+    theme(axis.text.x=element_text(angle=90)) +
+    guides(fill=FALSE)
+  
+#   
+# dt_new = dt[ ,.(genexpert_site, level, district, machines)]
+# write.csv(dt_new, "J:/Project/Evaluation/GF/outcome_measurement/cod/dhis_data/gene_machines.csv")
+  
+  
 # ----------------------------------------------------------
 # implementing partners  
 
@@ -440,7 +575,8 @@ ggplot(part, aes(x=reorder(impl_partner, -total_samples), y=total_samples, fill=
   labs(x='Implementing Partner', y='Total Samples', title='Total samples by implementing partner',
        subtitle=paste0('Total samples: ', total_part), 
        fill=" ") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
+  guides(fill=F)
 
 # ---------------------------
 #  percent TB positive
@@ -452,7 +588,7 @@ ggplot(part, aes(x=reorder(impl_partner, -percent_pos), y=percent_pos, label=per
   scale_fill_manual(values=lav) + 
   theme_minimal() +
   labs(x='Implementing partner', y='Percent positive (%)', 
-       title="Percentage of total samples that were positive for TB") +
+       title="Percentage of total samples that were positive for TB by implementing partner") +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
   guides(fill=FALSE)
 
@@ -471,7 +607,7 @@ ggplot(compare_part, aes(x=impl_partner, y=value, fill=variable)) +
   theme_minimal() +
   scale_fill_manual(values=ratios) +
   labs(x='Implementing Partner', y='Percent (%)', 
-       title="Percentage of total samples", 
+       title="Percentage of total samples by implementing partner", 
        fill='') +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) 
 # ---------------------------
