@@ -77,7 +77,7 @@ head(dt)
 # drop out the extra column added by excel
 dt[ , X__1:=NULL]
 
-
+# change this in the data 
 # list the names for the columns that you want to appear
 new_column_names = c("genexpert_site", "district", "region", "impl_partner", "reported", 
                      "total_samples", "tb_positive", "rif_resist", "rif_indet", "total_errors",
