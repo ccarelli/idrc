@@ -20,24 +20,15 @@ library(LaCroixColoR)
 # --------------------
 
 #------------------------------------------------
-# to code in the same code, we need to set file pathways for each user
-# this command automatically detects your username!
-
-user = Sys.info()[['user']]
-
 # -----------------------------------------------
 # input and output directories
 # the input directory imports the data, output saves figures
 
 # change to the folder on your computer where all of the TB data are saved
-inDir = paste0("C:/Users/", user, "/Documents/tb_prepped/")
+inDir = paste0("C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_prepped/")
 
 # create a folder for outputs, including figures and cleaned data sets as RDS files
-outDir = paste0("C:/Users/", user, "/Documents/tb_outputs/")
-
-# set working directory to the location of your shape file 
-# this allows you to create maps
-setwd('J:/Project/Evaluation/GF/mapping/uga/')
+outDir = paste0("C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_output/")
 
 # -----------------------------------------------
 # import the prepped data 
@@ -76,7 +67,7 @@ dt = merge_new_dists(dt)
 # prepare data and shape file to create maps 
 
 # uganda shapefile
-map = shapefile('uga_dist112_map.shp')
+map = shapefile('D:/shapefiles/uga_shape/uga_dist112_map.shp')
 
 # use the fortify function to convert from spatialpolygonsdataframe to data.frame
 coord = data.table(fortify(map, region='dist112')) 
@@ -99,13 +90,15 @@ setnames(map_names, c('dist112_na', 'dist112'),
 # this creates maps of all time, rather than by date
 
 # calculate sums and rates at the district level 
-dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=9:16]
-dist[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+dist = dt[ , lapply(.SD, sum, na.rm=T), by=district, .SDcols=c(5:11,17)]
+
+
+dist[ ,percent_pos:=round(100*tb_positive/samples_tested, 1)]
 dist[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
-dist[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
+dist[ ,percent_res_total:=round(100*rif_resist/samples_tested, 1)]
 dist[ ,percent_indet:=round(100*rif_indet/tb_positive, 1)]
-dist[ ,percent_indet_total:=round(100*rif_indet/total_samples, 1)]
-dist[ ,error_rate:=round(100*total_errors/total_samples, 1)]
+dist[ ,percent_indet_total:=round(100*rif_indet/samples_tested, 1)]
+dist[ ,error_rate:=round(100*total_errors/samples_tested, 1)]
 
 # merge the map and the data using district ids
 dist = merge(dist, map_names, by='district', all=T)
@@ -126,158 +119,148 @@ turq = '#80cdc1'
 ratios = c('#bd0026', '#3182bd', '#74c476', '#feb24c')
 sex_colors = c('#bd0026', '#3182bd', '#74c476', '#8856a7')
 lav = '#bebada'
-croix = lacroix_palette("Pamplemousse", n = 50, type = "continuous")
+croix = brewer.pal(9, 'Reds')
 
 #-------------------------------------------------------------
 # CREATE MAPS AND GRAPHS 
 
 # --------------------------------------------------------------
 # exploratory graphs
-
-pdf(paste0(outDir, 'tb_sample_figures.pdf'), height=9, width=12)
+# 
+# pdf(paste0(outDir, 'tb_sample_figures.pdf'), height=9, width=12)
 
 #------------------------------
 # reporting by genexpert sites
+# 
 
-# calculate facilities reporting by region 
-rep = dt[ ,.(reported=sum(reported), sites=length(unique(genexpert_site))), by=region]
-reporting_rate = rep[ ,.(round(100*sum(reported)/sum(sites), 1))]
+# --------------------------------------------------------------
+# time trends of major variables
 
-# bar graph of reporting compared to total sites 
-ggplot(rep, aes(x=region, y=sites, fill='GeneXpert Sites', label=sites)) +
-  geom_bar(stat="identity") +
-  geom_bar(aes(y=rep$reported, fill='Reported'), stat="identity") + 
-  geom_text(size = 4, position=position_stack(vjust = 1.06)) +
-  scale_fill_manual(name='', values=bar_colors) + theme_minimal() +
-  labs(x='Region', y='Total GeneXpert Sites', subtitle=paste0('Reporting rate: ', reporting_rate, '%'), 
-       title="Number of GeneXpert sites reporting by region, April 1 - 7, 2019") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+natl = dt[ , lapply(.SD, sum, na.rm=T), by=date, .SDcols=c(5:11, 17)]
+natl[ ,error_rate:=NULL]
+natl = melt(natl, id.vars='date')
 
-# percent reporting
-rep[ ,rate:=round(100*reported/sites, 1)]
-rep[ ,all:=rate==100]
+natl$variable = factor(natl$variable, c('samples_tested', 'tb_pos_rif_neg', 'rif_resist',   
+                        'rif_indet', 'total_errors','average_util', 'tb_positive'),
+       c('Samples tested for TB', 'TB positive samples that were Rifampicin negative',
+         'Rifampicin resistant', 'Rifampicin indeterminate', 'Total errors', 'Average utilization',
+         'Total TB positive'))
+var_names = natl[ ,unique(variable)]
 
-# percent of facilities reporting and reporting size
-ggplot(rep, aes(x=region, y=rate, color=all, size=sites, label=sites)) +
-  geom_point(alpha=0.5) +
-  geom_text(size = 4, position=position_stack(vjust = 1.02)) +
-  theme_bw() +
-  ylim(80, NA) +
-  scale_color_manual(values=true_false) +
-  labs(title="Percent of GeneXpert sites reporting (%), April 1 - 7, 2019", y="Percent reporting (%)", x="Region", color="100% reported", 
-       size="Number of sites", subtitle='Value label = total number of GeneXpert sites') +
-  theme(text = element_text(size=14), axis.text.x=element_text(size=12, angle=90)) 
+list_of_plots = NULL
+i = 1
 
-# facilities reporting by facility level 
-rep_level = dt[ ,.(reported=sum(reported), sites=length(unique(genexpert_site))), by=level]
+for (v in var_names) {
+  title = as.character(v)
+  total_n = natl[variable==v, sum(value)]
+  
+  list_of_plots[[i]] = ggplot(natl[variable==v], aes(x=date, y=value)) + 
+    geom_point() +
+    geom_line() +
+    theme_bw() +
+    labs(x='Date', y='Count', title=title, 
+         subtitle=paste0('Total n = ', total_n))
+    
+  i = i+1
+}
 
-# calculate the sum of facilities that did not report
-rep_level[ , no_report:=(sites-reported)]
-no_reports = sum(rep_level$no_report)
-
-# bar graph of reporting compared to total sites 
-ggplot(rep_level, aes(x=level, y=sites, fill='GeneXpert Sites', label=sites)) +
-  geom_bar(stat="identity") +
-  geom_bar(aes(y=rep_level$reported, fill='Reported'), stat="identity") + 
-  geom_text(size = 4, position=position_stack(vjust = 0.5)) +
-  scale_fill_manual(name='', values=alt_bar_colors) + theme_minimal() +
-  labs(x='Region', y='Total GeneXpert Sites', subtitle='Value = number of total sites*', 
-       title="Number of GeneXpert sites reporting by health facility level",
-       caption=paste0("*", no_reports, ' total facilities did not report.' )) +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12))
-
-#------------------------------
-# samples submitted by children under 14
-
-# calculate the counts and percentages of all samples
-kids = dt[ ,.(total_samples = sum(total_samples), children = sum(children_under_14)), by=region]
-kids[ ,ratio:=round(100*children/total_samples, 1)]
-
-# shape the data long
-kids_long = melt(kids, id.vars='region')
-
-# label the variables 
-kids_long$variable = factor(kids_long$variable, c('total_samples', 'children', 'ratio'),
-                        c('Total samples', 'Samples submitted by children < 14',
-                        'Percentage of samples submitted by children < 14 (%)'))
+pdf("thing.pdf",width = 12,height=6)
 
 
-# colors for the stacked bar graphs of samples subkitted by children 
-kid_colors = c('Total samples'='#998ec3', 'Samples submitted by children < 14'='#f1a340')
-percent = round(100*kids[ ,sum(children)/sum(total_samples)], 1)
+for(i in seq(length(list_of_plots))){
+  print(list_of_plots[[i]])
+}
 
-# bar graph of reporting compared to total sites 
-ggplot(kids, aes(x=region, y=total_samples, fill='Total samples', label=total_samples)) +
-  geom_bar(stat="identity") +
-  geom_bar(aes(y=children, fill='Samples submitted by children < 14'), stat="identity") + 
-  geom_text(size = 4, position=position_stack(vjust = 1.06)) +
-  scale_fill_manual(name='', values=kid_colors) + theme_minimal() +
-  labs(x='Region', y='Samples', 
-       subtitle = paste0(percent, '% of all samples'), 
-       title="Samples submitted by children under 14") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+dev.off()
 
-# bar graph of reporting compared to total sites 
-ggplot(kids_long[variable!='Total samples'], aes(x=region, y=value, fill=variable, label=value)) +
-  geom_bar(stat="identity") +
-  facet_wrap(~variable, scales='free_y') +
-  geom_text(size = 4, position=position_stack(vjust = 0.5)) +
-  scale_fill_manual(values=c(turq, lav)) +
-  theme_minimal() +
-  labs(x='Region', y=' ', title="Samples submitted by children under 14, count and percentage") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
-  guides(fill=FALSE)
 
-#------------------------------
-# count of machines by region and implementer
+# --------------------------------------------------------------
 
-# machines by region and implementing partner
-mach = dt[ ,.(machines=sum(machines)), by=region][order(machines)]
-mach_part =  dt[ ,.(machines=sum(machines)), by=impl_partner][order(machines)]
 
-# count of genexpert machines by region 
-ggplot(mach, aes(x=reorder(region, -machines), y=machines, label=machines, fill=single_red)) +
-  geom_bar(stat="identity") +
-  geom_text(size = 4, position=position_stack(vjust = 1.06)) +
-  scale_fill_manual(name='', values=single_red) + 
-  theme_minimal() +
-  labs(x='Region', y='Number of GeneXpert Machines', 
-       title="Number of GeneXpert machines by region") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
-  guides(fill=FALSE)
 
-# count of genexpert machines by implementing partner
-ggplot(mach_part, aes(x=reorder(impl_partner, -machines), y=machines, label=machines, fill=single_blue)) +
-  geom_bar(stat="identity") +
-  geom_text(size = 4, position=position_stack(vjust = 1.1)) +
-  scale_fill_manual(values=single_blue) + 
-  theme_minimal() +
-  labs(x='Implementing Partner', y='Number of GeneXpert Machines', 
-       title="Number of GeneXpert machines by implementing partner") +
-  theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
-  guides(fill=FALSE)
+
+
+
+
+# # calculate facilities reporting by region 
+# rep = dt[ ,.(reported=length(unique(genexpert_site))), by=c("region","genexpert_site")]
+# 
+# # bar graph of reporting compared to total sites 
+# ggplot(rep, aes(x=region, y=reported, fill='GeneXpert Sites', label=sites)) +
+#   geom_bar(stat="identity") +
+#   geom_bar(aes(y=rep$reported, fill='Reported'), stat="identity") + 
+#   geom_text(size = 4, position=position_stack(vjust = 1.06)) +
+#   scale_fill_manual(name='', values=bar_colors) + theme_minimal() +
+#   labs(x='Region', y='Total GeneXpert Sites', subtitle=paste0(''), 
+#        title="Number of GeneXpert sites reporting by region, April 1 - 7, 2019") +
+#   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90))
+# 
+# # percent reporting
+# rep[ ,rate:=round(100*reported/sites, 1)]
+# rep[ ,all:=rate==100]
+# 
+# # percent of facilities reporting and reporting size
+# ggplot(rep, aes(x=region, y=rate, color=all, size=sites, label=sites)) +
+#   geom_point(alpha=0.5) +
+#   geom_text(size = 4, position=position_stack(vjust = 1.02)) +
+#   theme_bw() +
+#   ylim(80, NA) +
+#   scale_color_manual(values=true_false) +
+#   labs(title="Percent of GeneXpert sites reporting (%), April 1 - 7, 2019", y="Percent reporting (%)", x="Region", color="100% reported", 
+#        size="Number of sites", subtitle='Value label = total number of GeneXpert sites') +
+#   theme(text = element_text(size=14), axis.text.x=element_text(size=12, angle=90)) 
+# 
+# # facilities reporting by facility level 
+# rep_level = dt[ ,.(reported=sum(reported), sites=length(unique(genexpert_site))), by=level]
+# 
+# # calculate the sum of facilities that did not report
+# rep_level[ , no_report:=(sites-reported)]
+# no_reports = sum(rep_level$no_report)
+# 
+# # bar graph of reporting compared to total sites 
+# ggplot(rep_level, aes(x=level, y=sites, fill='GeneXpert Sites', label=sites)) +
+#   geom_bar(stat="identity") +
+#   geom_bar(aes(y=rep_level$reported, fill='Reported'), stat="identity") + 
+#   geom_text(size = 4, position=position_stack(vjust = 0.5)) +
+#   scale_fill_manual(name='', values=alt_bar_colors) + theme_minimal() +
+#   labs(x='Region', y='Total GeneXpert Sites', subtitle='Value = number of total sites*', 
+#        title="Number of GeneXpert sites reporting by health facility level",
+#        caption=paste0("*", no_reports, ' total facilities did not report.' )) +
+#   theme(text = element_text(size=18), axis.text.x=element_text(size=12))
+
+# 
+# # bar graph of reporting compared to total sites 
+# ggplot(kids_long[variable!='Total samples'], aes(x=region, y=value, fill=variable, label=value)) +
+#   geom_bar(stat="identity") +
+#   facet_wrap(~variable, scales='free_y') +
+#   geom_text(size = 4, position=position_stack(vjust = 0.5)) +
+#   scale_fill_manual(values=c(turq, lav)) +
+#   theme_minimal() +
+#   labs(x='Region', y=' ', title="Samples submitted by children under 14, count and percentage") +
+#   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
+#   guides(fill=FALSE)
 
 # ------------------------------------------------------------------------------------
 # rates by region 
 
 # calculate rates 
-reg = dt[ , lapply(.SD, sum, na.rm=T), by=region, .SDcols=9:15]
-reg[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+reg = dt[ , lapply(.SD, sum, na.rm=T), by=region, .SDcols=c(5:11, 17)]
+reg[ ,percent_pos:=round(100*tb_positive/samples_tested, 1)]
 reg[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
-reg[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
+reg[ ,percent_res_total:=round(100*rif_resist/samples_tested, 1)]
 reg[ ,percent_indet:=round(100*rif_indet/tb_positive, 1)]
-reg[ ,percent_indet_total:=round(100*rif_indet/total_samples, 1)]
-reg[ ,error_rate:=round(100*total_errors/total_samples, 1)]
+reg[ ,percent_indet_total:=round(100*rif_indet/samples_tested, 1)]
+reg[ ,error_rate:=round(100*total_errors/samples_tested, 1)]
 
 # ---------------------------
 # count of total samples and total positive samples
-reg_sub = reg[ ,.(total_samples, tb_positive) , by=region]
+reg_sub = reg[ ,.(samples_tested, tb_positive) , by=region]
 reg_sub = melt(reg_sub, id.vars='region')
 
 
-count_labels = reg[ ,.(total_samples = sum(total_samples), tb_positive=sum(tb_positive))]
-reg_sub$variable = factor(reg_sub$variable, c('total_samples', 'tb_positive'),
-                          c(paste0('Total samples (n = ', count_labels$total_samples, ')'),
+count_labels = reg[ ,.(samples_tested = sum(samples_tested), tb_positive=sum(tb_positive))]
+reg_sub$variable = factor(reg_sub$variable, c('samples_tested', 'tb_positive'),
+                          c(paste0('Total samples (n = ', count_labels$samples_tested, ')'),
                             paste0('Positive for TB (n = ', count_labels$tb_positive, ')')))
 
 ggplot(reg_sub, aes(x=reorder(region, -value), y=value, label=value, fill=variable)) +
@@ -293,22 +276,22 @@ ggplot(reg_sub, aes(x=reorder(region, -value), y=value, label=value, fill=variab
 #---------------------------------------------------------------
 # tests performed by implementer
 
-part = dt[ , lapply(.SD, sum, na.rm=T), by=impl_partner, .SDcols=9:15]
-part[ ,percent_pos:=round(100*tb_positive/total_samples, 1)]
+part = dt[ , lapply(.SD, sum, na.rm=T), by=impl_partner, .SDcols=c(5:11, 17)]
+part[ ,percent_pos:=round(100*tb_positive/samples_tested, 1)]
 part[ ,percent_res:=round(100*rif_resist/tb_positive, 1)]
-part[ ,percent_res_total:=round(100*rif_resist/total_samples, 1)]
+part[ ,percent_res_total:=round(100*rif_resist/samples_tested, 1)]
 part[ ,percent_indet:=round(100*rif_indet/tb_positive, 1)]
-part[ ,percent_indet_total:=round(100*rif_indet/total_samples, 1)]
-part[ ,error_rate:=round(100*total_errors/total_samples, 1)]
+part[ ,percent_indet_total:=round(100*rif_indet/samples_tested, 1)]
+part[ ,error_rate:=round(100*total_errors/samples_tested, 1)]
 
 # count of total samples and total positive samples by implementer
-part_sub = part[ ,.(total_samples, tb_positive) , by=impl_partner]
+part_sub = part[ ,.(samples_tested, tb_positive) , by=impl_partner]
 part_sub = melt(part_sub, id.vars='impl_partner')
 
 # tb positive samples by implementing partner
-count_labels2 = part[ ,.(total_samples = sum(total_samples), tb_positive=sum(tb_positive))]
-part_sub$variable = factor(part_sub$variable, c('total_samples', 'tb_positive'),
-                           c(paste0('Total samples (n = ', count_labels$total_samples, ')'),
+count_labels2 = part[ ,.(samples_tested = sum(samples_tested), tb_positive=sum(tb_positive))]
+part_sub$variable = factor(part_sub$variable, c('samples_tested', 'tb_positive'),
+                           c(paste0('Total samples (n = ', count_labels$samples_tested, ')'),
                              paste0('Positive for TB (n = ', count_labels$tb_positive, ')')))
 
 ggplot(part_sub, aes(x=reorder(impl_partner, -value), y=value, label=value, fill=variable)) +
@@ -332,7 +315,7 @@ ggplot(reg, aes(x=reorder(region, -percent_pos), y=percent_pos, label=percent_po
   scale_fill_manual(values=turq) + 
   theme_minimal() +
   labs(x='Region', y='Percent positive (%)', 
-       title="Percentage of total samples that were positive for TB, April 1 - 7, 2019") +
+       title="Percentage of total samples that were positive for TB") +
   theme(text = element_text(size=18), axis.text.x=element_text(size=12, angle=90)) +
   guides(fill=FALSE)
 
@@ -369,13 +352,13 @@ ggplot(compare[variable!='TB positive'], aes(x=region, y=value, fill=variable)) 
 # MAPS OF PROPORTIONS AND COUNTS 
 
 # calculate sample size for labels
-samples = dt[ ,sum(total_samples)]
+samples = dt[ ,sum(samples_tested)]
 retreats = dt[ ,sum(retreatments)]
 pos = dt[ ,sum(tb_positive)]
 childs = dt[ ,sum(children_under_14)]
 
 # total samples
-ggplot(coord, aes(x=long, y=lat, group=group, fill=total_samples)) + 
+ggplot(coord, aes(x=long, y=lat, group=group, fill=samples_tested)) + 
   geom_polygon() + 
   geom_path(size=0.01, color="#636363") + 
   scale_fill_gradientn(colors=brewer.pal(9, 'Blues')) + 
@@ -567,9 +550,9 @@ ggplot(coord, aes(x=long, y=lat, group=group, fill=percent_indet)) +
 # implementing partners  
 
 # total samples by implementing partner
-total_part = sum(part$total_samples)
+total_part = sum(part$samples_tested)
 
-ggplot(part, aes(x=reorder(impl_partner, -total_samples), y=total_samples, fill='Total samples')) +
+ggplot(part, aes(x=reorder(impl_partner, -samples_tested), y=samples_tested, fill='Total samples')) +
   geom_bar(stat="identity") +
   theme_minimal() +
   labs(x='Implementing Partner', y='Total Samples', title='Total samples by implementing partner',
