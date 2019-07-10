@@ -46,18 +46,20 @@ for (f in files) {
 # import the data and make it into a data table 
 dt = data.table(read.csv(paste0(inDir, f), stringsAsFactors = F))
 
-# ----------------------
+----------------------
 # format the columns to appear correctly
 
+# change this in the data
+
 # list the names for the columns that you want to appear
-new_column_names = c("site_id","genexpert_site","machines", "district", "region",
-                     "impl_partner", "samples_tested", "tb_pos_rif_neg", "rif_resist",
-                     "rif_indet", "total_errors", "average_util", "error_rate")
+new_cols <- c("site_id", "genexpert_site","machines", "district", "region",
+  "impl_partner", "samples_tested", "tb_pos_rif_neg", "rif_resist",
+  "rif_indet", "total_errors", "average_util", "error_rate")
 
-# reset the column (variable) names         
-setnames(dt, new_column_names)
+# reset the column (variable) names
+setnames(dt, new_cols)
 
-# drop site id as it may not be consistent by file 
+# drop site id as it may not be consistent by file
 dt[ ,site_id:=NULL]
 
 # clean the data so that it can be analyzed
@@ -79,17 +81,17 @@ dt[ , date:=as.Date(date)]
 
 # ---------------------------------------
 # fix region and implementing partner names with distinct capitalization
-# formatting for figures and tables 
+# formatting for figures and tables
 
 # -------------------------
-# geographic areas 
+# geographic areas
 
 # format names of regions
 #dt[,region:=capitalize(tolower(region))]
 dt[region=='Fortportal', region:='Fort Portal']
-dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region 
+dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region
 
-# format the names of districts 
+# format the names of districts
 # drop the words district and hospital, fix capitalization, trim blanks
 dt[ , district:=gsub('District', "", district)]
 dt[ , district:=gsub('Hospital', "", district)]
@@ -108,11 +110,11 @@ dt[impl_partner=="CDC SOROTI PROJECT", impl_partner:='CDC Soroti Project']
 dt[impl_partner=='No IP', impl_partner:='No partner']
 
 # -------------------------
-# format facility names and add facility level 
+# format facility names and add facility level
 
 # drop out the (machines-1) designation from the facility names
 dt[ , genexpert_site:=unlist(lapply(strsplit(genexpert_site, "\\("), "[", 1))]
-dt[ , genexpert_site:=trimws(genexpert_site)] 
+dt[ , genexpert_site:=trimws(genexpert_site)]
 
 # some of the hospital names are abbreviated or in all caps
 dt[!grep("Hospital", genexpert_site) , genexpert_site:=gsub("Hosp", "Hospital", genexpert_site)]
@@ -149,10 +151,10 @@ dt[ , average_util:=as.numeric(average_util)]
 dt[ , error_rate:=as.numeric(error_rate)]
 dt[ , rif_indet:=as.numeric(rif_indet)]
 
-# --------------------
-# append the current excel sheet to the full data 
-# we are adding each cleaned sheet to one, single data set
-# when the loop is complete, the data set will be called 'full_data'
+# # --------------------
+# # append the current excel sheet to the full data 
+# # we are adding each cleaned sheet to one, single data set
+# # when the loop is complete, the data set will be called 'full_data'
 
 if(i==1) full_data = dt
 if(i>1) full_data = rbind(full_data, dt)
