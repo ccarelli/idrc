@@ -1,12 +1,5 @@
 # ----------------------------------------------
-# GENEXPERT DATA ANALYSIS
-# Cleaning code for GeneXpert data 
-# Imports data as weekly Excel spreadshets
 #
-# Caitlin O'Brien-Carelli
-#
-# 4/30/2019
-
 # ----------------------------------------------
 
 # --------------------
@@ -23,24 +16,17 @@ library(Hmisc)
 library(tools)
 # --------------------
 
-#------------------------------------------------
-# to code in the same code, we need to set file pathways for each user
-# change the username to your username on your computer
-# for example: user = 'copio'
 
-# user = 'copio'
+#-------------------------------
+# import the files 
 
-user = 'ccarelli'
+# set the working directory 
+inDir="C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_raw_data/"
 
-# -----------------------------------------------
-# place all the tb files in a single folder in order to import the folder contents
+# set the working directory
+setwd(inDir)
 
-# change to the folder on your computer where all of the TB data are saved
-# change to the folder on your computer where all of the TB data are saved
-inDir = paste0("C:/Users/", user,   "/Documents/tb_raw_data/")
-
-# create a folder for outputs, including figures and cleaned data sets as RDS files
-outDir = paste0("C:/Users/", user, "/Documents/tb_prepped/")
+outDir = paste0("C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_prepped/")
 
 # create a vector of the file name
 files = list.files(inDir)
@@ -55,93 +41,57 @@ files
 # the index keeps track of which iteration of the loop the code is on
 i = 1
 
-# loop to clean and append the data together
 for (f in files) {
-
-# prints the names of the sheets in the excel file 
-excel_sheets(paste0(inDir, f))
-
+  
 # import the data and make it into a data table 
-# ignore the warnings! they just say that the first line has a date in it
-# for now, we only want the first sheet (sheet = 1)
-# the argument 'skip = 1' allows us to skip the first line of the excel sheet, which is blank
-dt = data.table(read_excel(paste0(inDir, f), sheet = 1, skip = 1))
+dt = data.table(read.csv(paste0(inDir, f), stringsAsFactors = F))
 
-# look at the first six lines of data 
-# it's a mess! 
-head(dt)
-
-# ----------------------
+----------------------
 # format the columns to appear correctly
 
-# drop out the extra column added by excel
-dt[ , X__1:=NULL]
+# change this in the data
 
-# change this in the data 
 # list the names for the columns that you want to appear
-new_column_names = c("genexpert_site", "district", "region", "impl_partner", "reported", 
-                     "total_samples", "tb_positive", "rif_resist", "rif_indet", "total_errors",
-                     "children_under_14", "retreatments", "percent_reporting_region", "status")
+new_cols <- c("site_id", "genexpert_site","machines", "district", "region",
+  "impl_partner", "samples_tested", "tb_pos_rif_neg", "rif_resist",
+  "rif_indet", "total_errors", "average_util", "error_rate")
 
-# reset the column (variable) names         
-setnames(dt, new_column_names)
+# reset the column (variable) names
+setnames(dt, new_cols)
 
-# check that the column names correspond to the correct columns
-# the values in row 1 that are not missing should be the same as the variable names
-# View(dt) # run this line to examine the data 
+# drop site id as it may not be consistent by file
+dt[ ,site_id:=NULL]
 
-# delete the first row, since it contains column names and not values
-dt = dt[-1, ]
-
-# ----------------------
-# subset to only the indivual values, not the aggregate tables at the bottom
-# we will use the tabular data later, but first just the counts from the facilities
-
-# this code finds the areas where 3 columns are false 
-dt[ ,index:=1:nrow(dt)]
-drop = dt[ ,lapply(.SD, is.na), by=index, .SDcols=2:4]
-drop = drop[district==T & region==T & impl_partner==T, min(index)]
-dt = dt[index < drop]
-dt[ ,index:=NULL]
-
-# ----------------------
 # clean the data so that it can be analyzed
-
-# add a variable for the number of genexpert machines per site 
-dt[grep('machines', genexpert_site), machines:=genexpert_site]
-dt[ , machines:=unlist(lapply(strsplit(dt$machines, "-"), "[", 2))]
-dt[!is.na(machines), machines:=gsub(")", "", machines)]
-dt[ ,machines:=as.numeric(machines)]
-dt[is.na(machines), machines:=1] # warning is ok - it thinks the values are words not numbers
-
-
 # ----------------------
 # create a date variable using the file name
 
-dt[ , day:=stri_extract_first_regex(f, "[0-9]+") ]
-dt[ , month:=unlist(lapply(strsplit(f, "\\."), "[", 3))]
-dt[ , year:=unlist(lapply(strsplit(f, "\\."), "[", 4))]
-dt[ , date:=as.Date(paste0(month,'-', day, '-', year), format="%m-%d-%Y")]
-dt[ ,c('month', 'day', 'year'):=NULL]
+dt[ ,quarter:=unlist(lapply(strsplit(f, " "), "[", 2))]
+dt[ ,year:=unlist(lapply(strsplit(f, " "), "[", 3))]
+dt[ ,year:=unlist(lapply(strsplit(year, "\\."), "[", 1))]
 
-# ----------------------
-# change reported to a logical rather than a 0/1 split
-# this code tests the statement "reported==1" and returns T/F
-dt[ ,reported:=reported==1]
+# set the date for the start of the quarter
+dt[quarter==1, date:=paste0(year, '-01-01')]
+dt[quarter==2, date:=paste0(year, '-04-01')]
+dt[quarter==3, date:=paste0(year, '-07-01')]
+dt[quarter==4, date:=paste0(year, '-10-01')]
+
+# convert type of date
+dt[ , date:=as.Date(date)]
 
 # ---------------------------------------
 # fix region and implementing partner names with distinct capitalization
-# formatting for figures and tables 
+# formatting for figures and tables
 
 # -------------------------
-# geographic areas 
+# geographic areas
 
 # format names of regions
-dt[region!='KCCA',region:=capitalize(tolower(region))]
+#dt[,region:=capitalize(tolower(region))]
 dt[region=='Fortportal', region:='Fort Portal']
-dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region 
+dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region
 
-# format the names of districts 
+# format the names of districts
 # drop the words district and hospital, fix capitalization, trim blanks
 dt[ , district:=gsub('District', "", district)]
 dt[ , district:=gsub('Hospital', "", district)]
@@ -160,11 +110,11 @@ dt[impl_partner=="CDC SOROTI PROJECT", impl_partner:='CDC Soroti Project']
 dt[impl_partner=='No IP', impl_partner:='No partner']
 
 # -------------------------
-# format facility names and add facility level 
+# format facility names and add facility level
 
 # drop out the (machines-1) designation from the facility names
 dt[ , genexpert_site:=unlist(lapply(strsplit(genexpert_site, "\\("), "[", 1))]
-dt[ , genexpert_site:=trimws(genexpert_site)] 
+dt[ , genexpert_site:=trimws(genexpert_site)]
 
 # some of the hospital names are abbreviated or in all caps
 dt[!grep("Hospital", genexpert_site) , genexpert_site:=gsub("Hosp", "Hospital", genexpert_site)]
@@ -190,24 +140,30 @@ total_sites = dt[ ,length(unique(genexpert_site))]
 print(paste0(dt[is.na(level), .(round(length(unique(genexpert_site))/total_sites, 1))],
              '% of total sites are missing the facility level.'))
 
-# -----------------------------------------------------------
-# convert character types
-
-dt = dt[ , lapply(.SD, as.numeric), 
-         by=c("genexpert_site", "level", "status", "district", "region", "impl_partner",
-                                    "reported", "date"), .SDcols=c(6:12, 15)]
-
+# drop the total tools
+dt[ ,test:=tolower(genexpert_site)]
+dt = dt[!is.na(machines)]
+dt = dt[!grepl("total", test)]
 # --------------------
-# append the current excel sheet to the full data 
-# we are adding each cleaned sheet to one, single data set
-# when the loop is complete, the data set will be called 'full_data'
+# convert variable types
+
+dt[ , tb_pos_rif_neg:=as.numeric(tb_pos_rif_neg)]
+dt[ , rif_resist:=as.numeric(rif_resist)]
+dt[ , average_util:=as.numeric(average_util)]
+dt[ , error_rate:=as.numeric(error_rate)]
+dt[ , rif_indet:=as.numeric(rif_indet)]
+
+# # --------------------
+# # append the current excel sheet to the full data 
+# # we are adding each cleaned sheet to one, single data set
+# # when the loop is complete, the data set will be called 'full_data'
 
 if(i==1) full_data = dt
 if(i>1) full_data = rbind(full_data, dt)
 i = i+1
 
 # --------------------
-}
+ }
 
 # --------------------------------------------------
 # examine the full data set! yay!
@@ -217,6 +173,14 @@ str(full_data)
 
 # look at the first six lines of the full data
 head(full_data)
+
+# calculate total positive for tb
+full_data[ ,tb_positive:=(tb_pos_rif_neg + rif_resist)]
+
+# drop machines from prepped data
+full_data[ , machines:=NULL]
+
+# later - add code about machines specifically
 
 # ----------------------
 # save the prepped file - it is ready for analysis! 
