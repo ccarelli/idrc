@@ -182,6 +182,8 @@ dt[grep("II", genexpert_site), level:='HC II']
 dt[grep("III", genexpert_site), level:='HC III']
 dt[grep("IV", genexpert_site), level:='HC IV']
 
+# check if any levels are missing
+
 
 # print the percentage of facilities for which level cannot be determined
 total_sites = dt[ ,length(unique(genexpert_site))]
