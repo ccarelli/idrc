@@ -48,7 +48,7 @@ tb[ ,.(facilities=length(unique(org_unit_id))), by=.(date)]
 # how many facilities reported in that month?
 report = tb[!is.na(value) ,.(facilities=length(unique(org_unit_id))), by=.(date)]
 report
-
+#-mean reap
 fac_report = tb[!is.na(value) ,.(facilities=length(unique(org_unit_id))), by=.(date, facility_level)]
 #-------------------------------
 # reporting completeness

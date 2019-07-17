@@ -1,7 +1,10 @@
 # ----------------------------------------------
-#
+# Quarterly cleaning code for the GeneXpert Data
+# 7/10/2019
+# Jaffer Okiring, Caitlin O'Brien-Carelli
 # ----------------------------------------------
 
+#
 # --------------------
 # Set up R
 rm(list=ls())
@@ -21,17 +24,18 @@ library(tools)
 # import the files 
 
 # set the working directory 
-inDir="C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_raw_data/"
+inDir = "C:/Users/Jaffer/Desktop/PCE/TB/Data/GeneXpert/Tb_raw_data/"
 
 # set the working directory
 setwd(inDir)
 
-outDir = paste0("C:/Users/Jaffer/Desktop/PCE/TB/Data/GenXpert/Tb_prepped/")
+# set output directory
+outDir = paste0("C:/Users/Jaffer/Desktop/PCE/TB/Data/GeneXpert/Tb_prepped/")
 
 # create a vector of the file name
 files = list.files(inDir)
 
-# print f to the console to see the files
+# print the list of files to the console
 files
 
 # ----------------------
@@ -46,18 +50,21 @@ for (f in files) {
 # import the data and make it into a data table 
 dt = data.table(read.csv(paste0(inDir, f), stringsAsFactors = F))
 
-----------------------
-# format the columns to appear correctly
+# create a variable for the file name
+dt[ , file_name:=as.character(f)]
 
-# change this in the data
+# create a vector of the old variable names
+old_names_data = names(dt)
 
-# list the names for the columns that you want to appear
-new_cols <- c("site_id", "genexpert_site","machines", "district", "region",
-  "impl_partner", "samples_tested", "tb_pos_rif_neg", "rif_resist",
-  "rif_indet", "total_errors", "average_util", "error_rate")
+new_names_data = c("site_id", "gene_xpert_site", "machines", "district", "region",
+            "impl_partner", "samples_tested", "tb_pos_rif_neg", "rif_resist",
+            "rif_indet", "total_errors", "average_util",
+            "error_rate", "file_name")    
 
-# reset the column (variable) names
-setnames(dt, new_cols)
+setnames(dt, old_names_data, new_names_data)
+
+print(as.character(f))
+print(old_names_data)
 
 # drop site id as it may not be consistent by file
 dt[ ,site_id:=NULL]
@@ -89,7 +96,17 @@ dt[ , date:=as.Date(date)]
 # format names of regions
 #dt[,region:=capitalize(tolower(region))]
 dt[region=='Fortportal', region:='Fort Portal']
-dt[district=='Kayunga', region:='Central'] # one facility in Kayunga is missing a region
+dt[region=='Karamoja', region:='Moroto']
+dt[ , region:=trimws(region)]
+
+dt[district=='Kayunga', region:='Kampala Central'] # one facility in Kayunga is missing a region
+dt[gene_xpert_site=='Dokolo HC IV',district:='Dokolo']
+dt[gene_xpert_site=='Dokolo HC IV',region:='Lira']
+#Butenga HC IV
+dt[gene_xpert_site=='Butenga HC IV',district:='Bukomansimbi']
+dt[gene_xpert_site=='Butenga HC IV',region:='Masaka']
+#RHSP
+
 
 # format the names of districts
 # drop the words district and hospital, fix capitalization, trim blanks
@@ -108,40 +125,44 @@ dt[impl_partner=="RHSP/HIWA (World vision)", impl_partner:="RHSP/HIWA (World Vis
 dt[impl_partner=='BAYLOR', impl_partner:='Baylor']
 dt[impl_partner=="CDC SOROTI PROJECT", impl_partner:='CDC Soroti Project']
 dt[impl_partner=='No IP', impl_partner:='No partner']
+dt[gene_xpert_site=='Butenga HC IV',impl_partner:='RHSP']
 
 # -------------------------
 # format facility names and add facility level
 
 # drop out the (machines-1) designation from the facility names
-dt[ , genexpert_site:=unlist(lapply(strsplit(genexpert_site, "\\("), "[", 1))]
-dt[ , genexpert_site:=trimws(genexpert_site)]
+dt[ , gene_xpert_site:=unlist(lapply(strsplit(gene_xpert_site, "\\("), "[", 1))]
+dt[ , gene_xpert_site:=trimws(gene_xpert_site)]
 
 # some of the hospital names are abbreviated or in all caps
-dt[!grep("Hospital", genexpert_site) , genexpert_site:=gsub("Hosp", "Hospital", genexpert_site)]
-dt[ , genexpert_site:=gsub("HOSPITAL", "Hospital", genexpert_site)]
+dt[!grep("Hospital", gene_xpert_site) , gene_xpert_site:=gsub("Hosp", "Hospital", gene_xpert_site)]
+dt[ , gene_xpert_site:=gsub("HOSPITAL", "Hospital", gene_xpert_site)]
 
 # fix the names of sites that contain typos
-dt[grep("Dzaipi", genexpert_site), genexpert_site:='Dzaipi HC III']
-dt[genexpert_site=='Bugono HICV', level:='HC IV']
-dt[genexpert_site=='Mbarara RRH', level:='Hospital']
-dt[genexpert_site=='Yumbe GH', level:='Hospital']
+dt[grep("Dzaipi", gene_xpert_site), gene_xpert_site:='Dzaipi HC III']
+dt[gene_xpert_site=='Bugono HICV', level:='HC IV']
+dt[gene_xpert_site=='Mbarara RRH', level:='Hospital']
+dt[gene_xpert_site=='Yumbe GH', level:='Hospital']
 
 # use facility names to determine the facility level
-dt[grep("Hospital", genexpert_site), level:='Hospital']
-dt[grep("II", genexpert_site), level:='HC II']
-dt[grep("III", genexpert_site), level:='HC III']
-dt[grep("IV", genexpert_site), level:='HC IV']
+dt[grep("Hospital", gene_xpert_site), level:='Hospital']
+dt[grep("II", gene_xpert_site), level:='HC II']
+dt[grep("III", gene_xpert_site), level:='HC III']
+dt[grep("IV", gene_xpert_site), level:='HC IV']
 
 
 # print the percentage of facilities for which level cannot be determined
-total_sites = dt[ ,length(unique(genexpert_site))]
-print(paste0(dt[is.na(level), .(round(length(unique(genexpert_site))/total_sites, 1))],
+total_sites = dt[ ,length(unique(gene_xpert_site))]
+print(paste0(dt[is.na(level), .(round(length(unique(gene_xpert_site))/total_sites, 1))],
              '% of total sites are missing the facility level.'))
 
-# drop the total tools
-dt[ ,test:=tolower(genexpert_site)]
+
+# drop the totals from the end of the file
+# all of the totals are missing the machines variable or include the word total
+dt[ ,test:=tolower(gene_xpert_site)]
 dt = dt[!is.na(machines)]
 dt = dt[!grepl("total", test)]
+
 # --------------------
 # convert variable types
 
@@ -151,10 +172,17 @@ dt[ , average_util:=as.numeric(average_util)]
 dt[ , error_rate:=as.numeric(error_rate)]
 dt[ , rif_indet:=as.numeric(rif_indet)]
 
+# facilities that are missing district or region
+facilities = c("Joint Clinic Research Center", "Dr. Charles Fathong Hospital", "Kasese Municipal Council HC III",
+"Uganda Cares HCIII-Lukaya", "Lwengo HC IV")
+
+dt[region=="", region:=NA]
+dt[district=="", district:=NA]
+
 # # --------------------
-# # append the current excel sheet to the full data 
-# # we are adding each cleaned sheet to one, single data set
-# # when the loop is complete, the data set will be called 'full_data'
+# append the current excel sheet to the full data
+# we are adding each cleaned sheet to one, single data set
+# when the loop is complete, the data set will be called 'full_data'
 
 if(i==1) full_data = dt
 if(i>1) full_data = rbind(full_data, dt)
@@ -173,20 +201,15 @@ str(full_data)
 head(full_data)
 
 # calculate total positive for tb
-full_data[ ,tb_positive:=(tb_pos_rif_neg + rif_resist)]
+full_data[ , tb_positive:=(tb_pos_rif_neg + rif_resist)]
 
-# drop machines from prepped data
-full_data[ , machines:=NULL]
-
-# later - add code about machines specifically
-
+full_data=full_data[!is.na(gene_xpert_site)]
 # ----------------------
 # save the prepped file - it is ready for analysis! 
 
 saveRDS(full_data, paste0(outDir, 'clean_genexpert_data.rds'))
 
 # ----------------------
-
 
 
 
