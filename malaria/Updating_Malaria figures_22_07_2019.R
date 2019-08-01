@@ -151,17 +151,19 @@ ggplot(propn_status[date>='2015-07-01'],
   theme(legend.position='bottom')
 
 # suggested way to show both segments of the linear trend at once (added by David 7/31/2019)
+# Adjusted Davids by introducing the period parameter
+# period for ploting two different segments as below
 
-ggplot(propn[date>='2015-07-01'],
-       aes(x=date, y=prop))+
+propn[date<'2015-07-01',period:="First"]
+propn[date>='2015-07-01',period:="Second"]
+
+ggplot(propn[date>='2013-01-01'], aes(x=date, y=prop,fill=period))+
   geom_point()+
   geom_line()+
   geom_smooth(method = "lm")+
-  geom_point(data=[date>='2013-01-01' & date<'2015-07-01'])+
-  geom_line(data=[date>='2013-01-01' & date<'2015-07-01'])+
-  geom_smooth(data=[date>='2013-01-01' & date<'2015-07-01'], method = "lm")+
   theme_bw() +
-    labs(title='Proportion of suspected cases tested', subtitle = '2000-2019',
-       x='Date', y='Percent', caption='Linear trend fitted in two segments to emphasize time periods with different trends') 
+  labs(title='Proportion of suspected cases tested', subtitle = '2013-2019',
+       x='Date', y='Percent', caption='Linear trend fitted in two segments to emphasize time periods with different trends')+
+  theme(legend.position = "none")
 
 dev.off()
