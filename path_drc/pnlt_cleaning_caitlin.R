@@ -13,6 +13,7 @@ library(stringr)
 library(RColorBrewer)
 library(gridExtra)
 library(grid)
+library(tools)
 # --------------------
 
 # --------------------
@@ -41,6 +42,7 @@ str(dt)
 dt[ ,date:=as.Date(date, format="%Y-%m-%d")]
 
 # convert trimestre to just a quarter variable
+# use gsub to replace the values
 dt[ ,trimestre:=gsub("T1 2018", "T1", trimestre)]
 dt[ ,trimestre:=gsub("T2 2018", "T2", trimestre)]
 dt[ ,trimestre:=gsub("T3 2018", "T3", trimestre)]
@@ -62,9 +64,12 @@ dt[ ,class(trimestre)] # data tables
 dt[ ,dps:=gsub("_", " ", dps)]
 dt[ , dps:=toTitleCase(dps)]
 
+#-----------------------------------------------------
+# export a prepared file to code from 
 
+saveRDS(dt, paste0(dir, "tb_hiv_ready_for_analysis.rds"))
 
-
+#-----------------------------------------------------
 
 
 
