@@ -63,8 +63,6 @@ ggplot(nt, aes(x=date, y=value, color=variable)) +
   scale_y_continuous(labels = scales::comma)
 
 
-
-
 # ----------------------------------
 
 
