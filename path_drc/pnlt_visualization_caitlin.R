@@ -71,6 +71,7 @@ hiv_tests = dt[ ,.(total_de_cas=sum(total_de_cas, na.rm = T),
        total_testes_vih=sum(tb_teste_vih, na.rm=T)), by=c('date') ]
 
 hiv_tests[ ,percent:=100*(total_testes_vih/total_de_cas)]
+hiv_tests[ ,percent:=round(percent, 1)] # round the percentages to 1 digit
 
 # make a graph of the percentage of total tb cases tested for hiv
 ggplot(hiv_tests,aes(x=date,y=percent))+
@@ -95,14 +96,17 @@ ggplot(hiv_tests,aes(x=date,y=total_testes_vih))+
   geom_point()+
   geom_line()+
   theme_bw() +
-  labs(title="total_testes_vih", 
+  labs(title="Total HIV tests performed on TB cases", 
        x="Date", y="Count", caption="Source: PNLT; data are quarterly")+
   theme(text=element_text(size=18))
 
 # ----------------------------------
 # complicated visualization from caitlin
 
-
+# shape the national level data long
+hiv_long = melt(hiv_tests, id.vars='date')
+hiv_long[variable=='percent', identifier:='Percent tested (%)']
+hiv_long[variable!='percent', identifier:='TB cases and HIV tests performed']
 
 
 
