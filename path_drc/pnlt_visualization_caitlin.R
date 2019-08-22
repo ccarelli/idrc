@@ -91,7 +91,7 @@ ggplot(hiv_tests,aes(x=date,y=total_de_cas))+
        x="Date", y="Count", caption="Source: PNLT; data are quarterly")+
   theme(text=element_text(size=18))
 
-# make a graph of the total tb cases
+# make a graph of the total hiv tests performed
 ggplot(hiv_tests,aes(x=date,y=total_testes_vih))+
   geom_point()+
   geom_line()+
@@ -105,8 +105,34 @@ ggplot(hiv_tests,aes(x=date,y=total_testes_vih))+
 
 # shape the national level data long
 hiv_long = melt(hiv_tests, id.vars='date')
-hiv_long[variable=='percent', identifier:='Percent tested (%)']
 hiv_long[variable!='percent', identifier:='TB cases and HIV tests performed']
+hiv_long[variable=='percent', identifier:='Percent tested (%)']
+
+hiv_long$variable = factor(hiv_long$variable, c('total_de_cas', 'total_testes_vih', 'percent'),
+       c('Total TB cases', 'Total HIV tests on TB pts.', 'Percent tested'))
+
+
+ggplot(hiv_long, aes(x=date, y=value, color=variable))+
+  geom_line()+
+  geom_point()+
+  facet_wrap(~identifier, scales='free_y')+
+  theme_bw() +
+  labs(color="", y="", x="Date")+
+  theme(text=element_text(size=20))
+
+# calculate statistics
+hiv_tests[order(date)]
+
+
+
+
+
+
+
+
+
+
+
 
 
 
